@@ -68,17 +68,26 @@ typedef enum {
     GPIO_UNUSED_15 = IO_27
 }GPIO_PinAssignments_e;
 
-
 typedef enum {
     PORT1,
     PORT2
 }GPIO_AvailablePorts;
 
-
 typedef enum {
     GPIO_INPUT_LOW,
     GPIO_INPUT_HIGH
 }GPIO_InputState;
+
+typedef void (*ISR_Function)(void);
+
+/*
+ * The interrupt edge trigger type is set by the PxIES registers
+ * The PxIFGx flag is set with with either a rising or falliing transition
+ */
+typedef enum {
+    GPIO_TRIGGER_RISING,
+    GPIO_TRIGGER_FALLING
+}GPIO_Trigger_e;
 
 
 // DEFINES
@@ -128,10 +137,15 @@ typedef enum {
 #define     GPIO_PIN_RESET          (0u)
 #define     GPIO_PIN_SET            (1u)
 
-#define     GPIO_PORTS              \
-{                                   \
-    (GPIO_RegDef_t*) PORT1_BADDR,   \
-    (GPIO_RegDef_t*) PORT2_BADDR    \
+/*
+ * Each PxIE bit enables the associated PxIFG interrupt flag
+ */
+#define     INTERRUPT_DISABLED      (0u)
+#define     INTERRUPT_ENABLED       (1u)
+
+#define     GPIO_PORTS              {\
+    (GPIO_RegDef_t*) PORT1_BADDR,    \
+    (GPIO_RegDef_t*) PORT2_BADDR     \
 }
 
 
@@ -147,3 +161,8 @@ uint8_t GPIO_CheckIODirection(GPIO_PinAssignments_e pAss);
 void GPIO_WriteToOutputPin(GPIO_PinAssignments_e pAss, uint8_t value);
 void GPIO_ToggleOutputPin(GPIO_PinAssignments_e pAss);
 uint8_t GPIO_ReadFromInputPin(GPIO_PinAssignments_e pAss);
+
+void GPIO_EnableInterrupt(GPIO_PinAssignments_e pAss);
+void GPIO_DisableInterrupt(GPIO_PinAssignments_e pAss);
+void GPIO_ConfigureInterrupt(GPIO_PinAssignments_e pAss, GPIO_Trigger_e trigger, ISR_Function isr);
+void GPIO_DeconfigureInterrupt(GPIO_PinAssignments_e pAss);

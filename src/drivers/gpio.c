@@ -1,4 +1,5 @@
 #include "gpio.h"
+#include "defines.h"
 
 #include <msp430.h>
 #include <stdint.h>
@@ -42,18 +43,29 @@ static const GPIO_PinConfig_t GPIO_TEST_LED = {
     .GPIO_PullUpDown            = GPIO_OUTPUT_LOW
 };
 
+const GPIO_PinConfig_t GPIO_INTERRUPT_FALL = {
+    .GPIO_Direction             = GPIO_DIR_INPUT,
+    .GPIO_InterruptEdgeSelect   = GPIO_TRIGGER_FALLING,
+    .GPIO_InterruptEnable       = GPIO_INTERRUPT_DISABLED,
+    .GPIO_InterruptFlag         = 0,
+    .GPIO_PortSelect            = 0,
+    .GPIO_PortSelect2           = 0,
+    .GPIO_ResistorEnable        = GPIO_RESISTOR_ENABLED,
+    .GPIO_PullUpDown            = GPIO_OUTPUT_HIGH
+};
+
 
 // This array holds the initial configuration for all IO pins.
 static const GPIO_PinConfig_t GPIO_Configs[GPIO_PORT_COUNT * GPIO_PORT_PIN_COUNT] = {
     [GPIO_LED_PP] = GPIO_TEST_LED,
-    [GPIO_UNUSED_1] = UNUSED_CONFIG,
+    [GPIO_UNUSED_1] = GPIO_INTERRUPT_FALL,
     [GPIO_UNUSED_2] = UNUSED_CONFIG,
     [GPIO_UNUSED_3] = UNUSED_CONFIG,
     [GPIO_UNUSED_4] = UNUSED_CONFIG,
     [GPIO_UNUSED_5] = UNUSED_CONFIG,
     [GPIO_UNUSED_6] = UNUSED_CONFIG,
     [GPIO_UNUSED_7] = UNUSED_CONFIG,
-    [GPIO_UNUSED_8] = UNUSED_CONFIG,
+    [GPIO_UNUSED_8] = GPIO_INTERRUPT_FALL,
     [GPIO_UNUSED_9] = UNUSED_CONFIG,
     [GPIO_UNUSED_10] = UNUSED_CONFIG,
     [GPIO_UNUSED_11] = UNUSED_CONFIG,
@@ -63,24 +75,24 @@ static const GPIO_PinConfig_t GPIO_Configs[GPIO_PORT_COUNT * GPIO_PORT_PIN_COUNT
     [GPIO_UNUSED_15] = UNUSED_CONFIG
 };
 
+static ISR_Function ISR_Functions[GPIO_PORT_COUNT][GPIO_PORT_PIN_COUNT] = {
+    [PORT1] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
+    [PORT2] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+};
 
 static volatile GPIO_RegDef_t* const GPIO_PortRegs[GPIO_PORT_COUNT] = GPIO_PORTS;
-
 
 static inline uint8_t GPIO_PinIdx(GPIO_PinAssignments_e pAss){
     return pAss & GPIO_PIN_MASK;
 }
 
-
 static uint8_t GPIO_PinBit(GPIO_PinAssignments_e pAss){
     return 1 << GPIO_PinIdx(pAss);
 }
 
-
 static uint8_t GPIO_PortIdx(GPIO_PinAssignments_e pAss){
     return (pAss & GPIO_PORT_MASK) >> GPIO_PORT_OFFSET;
 }
-
 
 void GPIO_ConfigPinSelect(GPIO_PinAssignments_e pAss){
     uint8_t pin_bit = GPIO_PinBit(pAss);
@@ -193,4 +205,93 @@ uint8_t GPIO_ReadFromInputPin(GPIO_PinAssignments_e pAss){
     volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
 
     return (pin_port->PxIN & pin_bit) ? GPIO_INPUT_HIGH : GPIO_INPUT_LOW;
+}
+
+static void GPIO_ClearInterrupt(GPIO_PinAssignments_e pAss){
+    uint8_t pin_bit = GPIO_PinBit(pAss);
+    volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
+
+    pin_port->PxIFG &= ~pin_bit;
+}
+
+/*
+ * According to the datasheet, setting PxIES may set the corresponding interrupt flag.
+ * Thus, we disable the interrupt before setting PxIES.
+ * Also, we clear PxIFG after setting PxIES because it could still be set in disable mode.
+ */
+static void GPIO_SetInterruptTrigger(GPIO_PinAssignments_e pAss, GPIO_Trigger_e trigger){
+    GPIO_DisableInterrupt(pAss);
+
+    uint8_t pin_bit = GPIO_PinBit(pAss);
+    volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
+
+    switch(trigger){
+        case GPIO_TRIGGER_RISING:
+            pin_port->PxIES &= ~pin_bit;
+            break;
+        case GPIO_TRIGGER_FALLING:
+            pin_port->PxIES |= pin_bit;
+            break;
+    }
+
+    GPIO_ClearInterrupt(pAss);
+}
+
+static void GPIO_RegisterISR(GPIO_PinAssignments_e pAss, ISR_Function isr){
+    ISR_Functions[GPIO_PortIdx(pAss)][GPIO_PinIdx(pAss)] = isr;
+}
+
+static void GPIO_UnregisterISR(GPIO_PinAssignments_e pAss){
+    ISR_Functions[GPIO_PortIdx(pAss)][GPIO_PinIdx(pAss)] = NULL;
+}
+
+void GPIO_EnableInterrupt(GPIO_PinAssignments_e pAss){
+    uint8_t pin_bit = GPIO_PinBit(pAss);
+    volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
+
+    pin_port->PxIE |= pin_bit;
+}
+
+void GPIO_DisableInterrupt(GPIO_PinAssignments_e pAss){
+    uint8_t pin_bit = GPIO_PinBit(pAss);
+    volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
+
+    pin_port->PxIE &= ~pin_bit;
+}
+
+void GPIO_ConfigureInterrupt(GPIO_PinAssignments_e pAss, GPIO_Trigger_e trigger, ISR_Function isr){
+    GPIO_SetInterruptTrigger(pAss, trigger);
+    GPIO_RegisterISR(pAss, isr);
+}
+
+void GPIO_DeconfigureInterrupt(GPIO_PinAssignments_e pAss){
+    GPIO_UnregisterISR(pAss);
+    GPIO_DisableInterrupt(pAss);
+}
+
+static void GPIO_ISR(GPIO_PinAssignments_e pAss){
+    uint8_t pin_bit = GPIO_PinBit(pAss);
+    uint8_t pin_idx = GPIO_PinIdx(pAss);
+    uint8_t port_idx = GPIO_PortIdx(pAss);
+    volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[port_idx];
+
+    if (pin_port->PxIFG & pin_bit){
+        if (ISR_Functions[port_idx][pin_idx] != NULL){
+            ISR_Functions[port_idx][pin_idx]();
+        }
+
+        GPIO_ClearInterrupt(pAss);
+    }
+}
+
+INTERRUPT_FUNCTION(PORT1_VECTOR) PORT1_ISR(void){
+    for (GPIO_PortPinNumber_e pp = IO_10; pp <= IO_17; pp++) {
+        GPIO_ISR(pp);
+    }
+}
+
+INTERRUPT_FUNCTION(PORT2_VECTOR) PORT2_ISR(void){
+    for (GPIO_PortPinNumber_e pp = IO_20; pp <= IO_27; pp++) {
+        GPIO_ISR(pp);
+    }
 }
