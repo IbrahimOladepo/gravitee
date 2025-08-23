@@ -2,6 +2,7 @@
 #include "defines.h"
 
 #include <msp430.h>
+#include <msp430g2553.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -54,6 +55,13 @@ const GPIO_PinConfig_t GPIO_INTERRUPT_FALL = {
     .GPIO_PullUpDown            = GPIO_OUTPUT_HIGH
 };
 
+/* 
+ * Array to hold PxSEL2 register addresses.
+ * The PxSEL2 register addresses are not in sequence with the rest of the port addresses.
+ * e.g. P1SEL = 0x0026, P1SEL2 = 0x0041, and P1REN = 0x0027
+ */
+static volatile uint8_t *const PxSEL2_Regs[GPIO_PORT_COUNT] = { &P1SEL2, &P2SEL2 };
+
 
 // This array holds the initial configuration for all IO pins.
 static const GPIO_PinConfig_t GPIO_Configs[GPIO_PORT_COUNT * GPIO_PORT_PIN_COUNT] = {
@@ -96,6 +104,7 @@ static uint8_t GPIO_PortIdx(GPIO_PinAssignments_e pAss){
 
 void GPIO_ConfigPinSelect(GPIO_PinAssignments_e pAss){
     uint8_t pin_bit = GPIO_PinBit(pAss);
+    uint8_t port_idx = GPIO_PortIdx(pAss);
     volatile GPIO_RegDef_t *pin_port = GPIO_PortRegs[GPIO_PortIdx(pAss)];
 
     if (GPIO_Configs[pAss].GPIO_PortSelect == 0)
@@ -104,9 +113,9 @@ void GPIO_ConfigPinSelect(GPIO_PinAssignments_e pAss){
         pin_port->PxSEL |= pin_bit;
     
     if (GPIO_Configs[pAss].GPIO_PortSelect2 == 0)
-        pin_port->PxSEL2 &= ~pin_bit;
+        *PxSEL2_Regs[port_idx] &= ~pin_bit;
     else if (GPIO_Configs[pAss].GPIO_PortSelect2 == 1)
-        pin_port->PxSEL2 |= pin_bit;
+        *PxSEL2_Regs[port_idx] |= pin_bit;
 }
 
 

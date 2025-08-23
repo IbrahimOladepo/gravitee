@@ -31,7 +31,7 @@ typedef struct
     uint8_t PxIES;
     uint8_t PxIE;
     uint8_t PxSEL;
-    uint8_t PxSEL2;
+    // uint8_t PxSEL2; // PxSEL2's address is off the sequence
     uint8_t PxREN;
 }GPIO_RegDef_t;
 
@@ -127,6 +127,9 @@ typedef enum {
 #define     PORT1_BADDR             0x0020
 #define     PORT2_BADDR             0x0028
 // #define     PORT3_BADDR             &P3IN   // 0x0018
+
+// #define     P1SEL2_ADDR             0x0041
+// #define     P2SEL2_ADDR             0x0042
 
 #define     GPIO_OUTPUT_LOW         (0u)
 #define     GPIO_OUTPUT_HIGH        (1u)
