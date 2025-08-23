@@ -46,7 +46,8 @@ endif
 
 SOURCES_WITH_HEADERS = \
 		src/drivers/led.c \
-		src/drivers/gpio.c
+		src/drivers/gpio.c \
+		src/drivers/mcu_init.c
 
 SOURCES = \
 		$(MAIN_FILE) \

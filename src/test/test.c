@@ -1,5 +1,6 @@
 #include "gpio.h"
 #include "defines.h"
+#include "mcu_init.h"
 
 #include <msp430.h>
 #include <msp430g2553.h>
@@ -7,14 +8,7 @@
 
 SUPPRESS_UNUSED
 static void test_setup(void){
-    // Stop the watchdog timer
-    WDTCTL = WDTPW + WDTHOLD;
-
-    // Initialize all GPIO pins based on initial configurations
-    GPIO_InitAllPortPins();
-
-    // Enable global interrupt
-    _enable_interrupts();
+    MCU_Init();
 }
 
 SUPPRESS_UNUSED
@@ -23,18 +17,18 @@ static void test_blink_LED(void){
 
     uint8_t i = 0;
     
-    for (i = 0; i < 20; i++){
+    for (i = 0; i < 3; i++){
         GPIO_ToggleOutputPin(GPIO_LED_PP);
-        __delay_cycles(250000);
+        BUSY_WAIT_MS(100);
 
         GPIO_ToggleOutputPin(GPIO_LED_PP);
-        __delay_cycles(250000);
+        BUSY_WAIT_MS(100);
 
         GPIO_ToggleOutputPin(GPIO_LED_PP);
-        __delay_cycles(250000);
+        BUSY_WAIT_MS(100);
 
         GPIO_ToggleOutputPin(GPIO_LED_PP);
-        __delay_cycles(1000000);
+        BUSY_WAIT_MS(1000);
     }
 }
 
